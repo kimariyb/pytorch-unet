@@ -17,16 +17,15 @@ For details, see the License file.
 
 import torch
 import torch.nn as nn
-import torchvision.transforms.functional as TF
+import torch.nn.functional as F
 
 
 class DoubleConv(nn.Module):
-    """(convolution => [BN] => ReLU) * 2"""
 
     def __init__(self, in_channels, out_channels, mid_channels=None):
         super(DoubleConv, self).__init__()
         self.conv = nn.Sequential(
-            # 通过卷积，由于 stride=1，所以输入输出尺寸不变
+            # 第一次卷积操作，由于 stride=1，所以输入输出尺寸不变
             nn.Conv2d(
                 in_channels, 
                 out_channels, 
@@ -37,7 +36,7 @@ class DoubleConv(nn.Module):
             ),
             nn.BatchNorm2d(out_channels),
             nn.ReLU(inplace=True),
-            # 二次卷积
+            # 二次卷积操作
             nn.Conv2d(
                 out_channels, 
                 out_channels, 
@@ -63,10 +62,12 @@ class UNet(nn.Module):
         self.pool = nn.MaxPool2d(kernel_size=2, stride=2)
 
         for feature in features:
+            # 下采样路径 (Encoder)
             self.downs.append(DoubleConv(in_channels, feature))
             in_channels = feature
             
         for feature in reversed(features):
+            # 上采样路径 (Decoder)
             self.ups.append(
                 nn.ConvTranspose2d(
                     feature*2, 
@@ -77,18 +78,22 @@ class UNet(nn.Module):
                 )
             )
             self.ups.append(DoubleConv(feature*2, feature))
-            
+        
+        # 瓶颈层
         self.bottleneck = DoubleConv(features[-1], features[-1]*2)
+        # 最终的卷积层
         self.final_conv = nn.Conv2d(features[0], out_channels, kernel_size=1)
 
     def forward(self, x):
         skip_connections = []
         
         for down in self.downs:
+            # 下采样路径 (Encoder) 的前向传播
             x = down(x)
             skip_connections.append(x)
             x = self.pool(x)
-            
+
+        # 瓶颈层的前向传播
         x = self.bottleneck(x)
         skip_connections = skip_connections[::-1]
         
@@ -97,22 +102,14 @@ class UNet(nn.Module):
             skip_connection = skip_connections[idx//2]
             
             if x.shape != skip_connection.shape:
-                x = TF.resize(x, size=skip_connection.shape[2:])
+                # 对 x 进行调整大小，使其与对应的 skip_connection 形状相同
+                x = F.interpolate(x, size=skip_connection.shape[2:])
             
+             # 将 skip_connection与 x 进行连接，并进行上采样
             concat_skip = torch.cat((skip_connection, x), dim=1)
             x = self.ups[idx+1](concat_skip)
-            
+        
+        # 最终卷积层的前向传播
         return self.final_conv(x)
     
 
-def test():
-    x = torch.randn((3, 3, 160, 160))
-
-    model = UNet(in_channels=3, out_channels=1)
-    pred = model(x)
-    print(x.shape)
-    print(pred.shape)
-
-
-if __name__ == '__main__':
-    test()
