@@ -37,4 +37,7 @@ PIN_MEMORY = True
 LOAD_MODEL = False
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
-TRAIN_IMG_DIR = "data/train/"
+TRAIN_IMG_DIR = "./data/imgs/train"
+TRAIN_MASK_DIR = "./data/masks/train"
+VAL_IMG_DIR = "./data/imgs/val"
+VAL_MASK_DIR = "./data/masks/val"
